@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API_BASE = "http://127.0.0.1:8000";
 
@@ -13,6 +13,9 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [listError, setListError] = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function loadDocs() {
     try {
@@ -23,6 +26,8 @@ export default function UploadPage() {
       setListError("");
     } catch (e) {
       setListError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -45,6 +50,8 @@ export default function UploadPage() {
       }
       const data = await res.json();
       setStatus(`Stored ${data.total_chunks} chunks from ${data.source_file}`);
+      setFile(null);
+      if (inputRef.current) inputRef.current.value = "";
       await loadDocs();
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "Something went wrong");
@@ -62,6 +69,16 @@ export default function UploadPage() {
       await loadDocs();
     } catch (e) {
       setListError(e instanceof Error ? e.message : "Something went wrong");
+    }
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setDragging(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) {
+      setFile(dropped);
+      setStatus("");
     }
   }
 
@@ -145,15 +162,39 @@ export default function UploadPage() {
           </select>
         </label>
 
-        <div style={{ marginBottom: 16 }}>
-          <p style={{ color: "#0f172a", fontWeight: 500, marginBottom: 6 }}>
-            File (PDF, PPTX, DOCX or TXT)
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          style={{
+            border: `2px dashed ${dragging ? "#4f46e5" : "#a5b4fc"}`,
+            background: dragging ? "#eef2ff" : "#f8fafc",
+            borderRadius: 12,
+            padding: 24,
+            textAlign: "center",
+            cursor: "pointer",
+            marginBottom: 16,
+          }}
+        >
+          <p style={{ color: "#0f172a", fontWeight: 500 }}>
+            {file ? file.name : "Drop a file here, or click to choose"}
+          </p>
+          <p style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>
+            {file ? "Click Upload & Store to save it." : "PDF, PPTX, DOCX or TXT"}
           </p>
           <input
+            ref={inputRef}
             type="file"
             accept=".pdf,.pptx,.docx,.txt"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            style={{ display: "block" }}
+            onChange={(e) => {
+              setFile(e.target.files?.[0] ?? null);
+              setStatus("");
+            }}
+            style={{ display: "none" }}
           />
         </div>
 
@@ -197,8 +238,26 @@ export default function UploadPage() {
           </p>
         )}
 
-        {docs.length === 0 && !listError && (
-          <p style={{ color: "#64748b" }}>No files uploaded yet.</p>
+        {loaded && docs.length === 0 && !listError && (
+          <div style={{ textAlign: "center", padding: "24px 12px" }}>
+            <p style={{ color: "#0f172a", fontWeight: 500, marginBottom: 6 }}>No materials yet</p>
+            <p style={{ color: "#64748b", fontSize: 14, marginBottom: 16 }}>
+              Upload your first lecture to get started.
+            </p>
+            <button
+              onClick={() => inputRef.current?.click()}
+              style={{
+                padding: "8px 16px",
+                background: "#4f46e5",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: 8,
+                cursor: "pointer",
+              }}
+            >
+              Upload notes
+            </button>
+          </div>
         )}
 
         {renderGroup("Notes", notes)}

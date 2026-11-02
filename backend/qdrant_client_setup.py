@@ -49,7 +49,6 @@ def store_chunks(chunks: list[str], embeddings: list[list[float]], source_file: 
         for i in range(len(chunks))
     ]
     client.upsert(collection_name=COLLECTION_NAME, points=points)
-
 def search_chunks(query: str, top_k: int = 5, min_score: float = 0.4, doc_type: str | None = None):
     query_embedding = get_embedding(query)
 
@@ -62,10 +61,29 @@ def search_chunks(query: str, top_k: int = 5, min_score: float = 0.4, doc_type: 
     results = client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_embedding,
-        limit=top_k,
+        limit=top_k * 3,
         query_filter=query_filter,
     ).points
-    return [r.payload["text"] for r in results if r.score >= min_score]
+
+    seen = set()
+    unique = []
+    for r in results:
+        if r.score < min_score:
+            continue
+        text = r.payload["text"]
+        key = text.strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append({
+            "text": text,
+            "source_file": r.payload.get("source_file", "Unknown file"),
+            "doc_type": r.payload.get("doc_type", "notes"),
+            "score": round(r.score, 3),
+        })
+        if len(unique) >= top_k:
+            break
+    return unique
 
 def search_chunks_with_scores(query: str, top_k: int = 5):
     query_embedding = get_embedding(query)
@@ -111,3 +129,5 @@ def delete_document(source_file: str, doc_type: str) -> None:
         collection_name=COLLECTION_NAME,
         points_selector=FilterSelector(filter=Filter(must=must)),
     )
+def search_texts(query: str, top_k: int = 5, min_score: float = 0.4, doc_type: str | None = None) -> list[str]:
+    return [r["text"] for r in search_chunks(query, top_k=top_k, min_score=min_score, doc_type=doc_type)]
